@@ -2,6 +2,7 @@
 #include <unordered_map>
 
 #include "layer_private.hpp"
+#include "logger.hpp"
 
 #include "generated/vulkan_dispatch_init.hpp"
 #include "vulkan_pnext.hpp"
@@ -23,9 +24,13 @@ namespace nl
             return t_instance_cache.layerInstance;
         }
 
-        std::lock_guard<std::mutex> l(g_instance_map_mutex);
+        LayerInstance* layerInstance;
 
-        LayerInstance* layerInstance = g_instance_map[key];
+        {
+            std::lock_guard<std::mutex> l(g_instance_map_mutex);
+
+            layerInstance = g_instance_map[key];
+        }
 
         t_instance_cache.loaderKey     = key;
         t_instance_cache.layerInstance = layerInstance;
@@ -40,9 +45,13 @@ namespace nl
             return t_device_cache.layerDevice;
         }
 
-        std::lock_guard<std::mutex> l(g_device_map_mutex);
+        LayerDevice* layerDevice;
 
-        LayerDevice* layerDevice = g_device_map[key];
+        {
+            std::lock_guard<std::mutex> l(g_device_map_mutex);
+
+            layerDevice = g_device_map[key];
+        }
 
         t_device_cache.loaderKey   = key;
         t_device_cache.layerDevice = layerDevice;
@@ -52,7 +61,47 @@ namespace nl
 
     VkResult VKAPI_CALL nl_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
     {
+        Logger::trace("vkCreateInstance");
+        auto layerCreateInfo = pNextSearch<VkLayerInstanceCreateInfo>(pCreateInfo->pNext, [](auto x) { return x->function == VK_LAYER_LINK_INFO; });
+
+        if (layerCreateInfo == nullptr)
+            return VK_ERROR_INITIALIZATION_FAILED;
+
+        PFN_vkGetInstanceProcAddr gipa = layerCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+        // move chain on for next layer
+        layerCreateInfo->u.pLayerInfo   = layerCreateInfo->u.pLayerInfo->pNext;
+        PFN_vkCreateInstance createFunc = (PFN_vkCreateInstance) gipa(VK_NULL_HANDLE, "vkCreateInstance");
+
+        VkResult ret = createFunc(pCreateInfo, pAllocator, pInstance);
+        if (ret != VK_SUCCESS)
+            return ret;
+
+        // create our Instance object and fetch dispatch table
+        LayerInstance* layerInstance = new LayerInstance();
+        layerInstance->instance      = *pInstance;
+        initInstanceTable(gipa, *pInstance, &layerInstance->vk);
+
+        {
+            std::lock_guard<std::mutex> l(g_instance_map_mutex);
+
+            g_instance_map[getKey(*pInstance)] = layerInstance;
+        }
+
         return VK_SUCCESS;
+    }
+
+    VK_LAYER_EXPORT void VKAPI_CALL nl_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator)
+    {
+        Logger::trace("vkDestroyInstance");
+
+        auto layerInstance = getLayerInstance(getKey(instance));
+        layerInstance->vk.DestroyInstance(instance, pAllocator);
+
+        {
+            std::lock_guard<std::mutex> l(g_instance_map_mutex);
+
+            g_instance_map.erase(getKey(instance));
+        }
     }
 
     VkResult VKAPI_CALL nl_CreateDevice(VkPhysicalDevice             physicalDevice,
