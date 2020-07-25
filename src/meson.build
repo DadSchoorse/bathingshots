@@ -1,6 +1,7 @@
 
 newlayer_src = [
     'layer_entry.cpp',
+    'logger.cpp',
 ]
 
 
