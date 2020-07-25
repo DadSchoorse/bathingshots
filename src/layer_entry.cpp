@@ -231,15 +231,46 @@ namespace nl
 
 extern "C"
 {
-    VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL newlayer_GetDeviceProcAddr(VkDevice device, const char* pName)
+    VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL nl_GetDeviceProcAddr(VkDevice device, const char* pName);
+    VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL nl_GetInstanceProcAddr(VkInstance instance, const char* pName);
+
+#define GETPROCADDR(func)                \
+    if (!std::strcmp(pName, "vk" #func)) \
+        return (PFN_vkVoidFunction) &nl_##func;
+
+#define INTERCEPT_CALLS                                \
+    /* instance chain functions we intercept */        \
+    GETPROCADDR(GetInstanceProcAddr);                  \
+    GETPROCADDR(EnumerateInstanceLayerProperties);     \
+    GETPROCADDR(EnumerateInstanceExtensionProperties); \
+    GETPROCADDR(CreateInstance);                       \
+    GETPROCADDR(DestroyInstance);                      \
+                                                       \
+    /* device chain functions we intercept*/           \
+    GETPROCADDR(GetDeviceProcAddr);                    \
+    GETPROCADDR(EnumerateDeviceLayerProperties);       \
+    GETPROCADDR(EnumerateDeviceExtensionProperties);   \
+    GETPROCADDR(CreateDevice);                         \
+    GETPROCADDR(DestroyDevice);
+
+    VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL nl_GetDeviceProcAddr(VkDevice device, const char* pName)
     {
         using namespace nl;
-        return (PFN_vkVoidFunction) nl_CreateDevice;
+        INTERCEPT_CALLS;
+
+        auto layerDevice = getLayerDevice(getKey(device));
+        return layerDevice->vk.GetDeviceProcAddr(device, pName);
     }
 
-    VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL newlayer_GetInstanceProcAddr(VkInstance instance, const char* pName)
+    VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL nl_GetInstanceProcAddr(VkInstance instance, const char* pName)
     {
         using namespace nl;
-        return (PFN_vkVoidFunction) nl_CreateInstance;
+        INTERCEPT_CALLS;
+
+        auto layerInstance = getLayerInstance(getKey(instance));
+        return layerInstance->vk.GetInstanceProcAddr(instance, pName);
     }
+
+#undef GETPROCADDR
+#undef INTERCEPT_CALLS
 }
