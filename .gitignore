@@ -1,0 +1,7 @@
+builddir/*
+releasedir/*
+*.xml
+*.o
+*.spv
+*.so
+*.a
