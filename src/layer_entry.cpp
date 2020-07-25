@@ -1,3 +1,4 @@
+#include <cstring>
 #include <mutex>
 #include <unordered_map>
 
@@ -6,6 +7,8 @@
 
 #include "generated/vulkan_dispatch_init.hpp"
 #include "vulkan_pnext.hpp"
+
+#define LAYER_NAME "VK_LAYER_new_layer"
 
 namespace nl
 {
@@ -148,11 +151,11 @@ namespace nl
         return VK_SUCCESS;
     }
 
-    VK_LAYER_EXPORT void VKAPI_CALL nl_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator)
+    void VKAPI_CALL nl_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator)
     {
         Logger::trace("vkDestroyDevice");
 
-        auto layerDevice = getLayerInstance(getKey(device));
+        auto layerDevice = getLayerDevice(getKey(device));
         layerDevice->vk.DestroyDevice(device, pAllocator);
 
         {
@@ -162,6 +165,67 @@ namespace nl
         }
 
         delete layerDevice;
+    }
+
+    VkResult VKAPI_CALL nl_EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties)
+    {
+        if (pPropertyCount)
+            *pPropertyCount = 1;
+
+        if (pProperties)
+        {
+            std::strcpy(pProperties->layerName, LAYER_NAME);
+            std::strcpy(pProperties->description, "test");
+            pProperties->implementationVersion = 1;
+            pProperties->specVersion           = VK_MAKE_VERSION(1, 2, 0);
+        }
+
+        return VK_SUCCESS;
+    }
+
+    VkResult VKAPI_CALL nl_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties)
+    {
+        return nl_EnumerateInstanceLayerProperties(pPropertyCount, pProperties);
+    }
+
+    VkResult VKAPI_CALL nl_EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
+    {
+        if (pLayerName == NULL || std::strcmp(pLayerName, LAYER_NAME))
+        {
+            return VK_ERROR_LAYER_NOT_PRESENT;
+        }
+
+        // don't expose any extensions
+        if (pPropertyCount)
+        {
+            *pPropertyCount = 0;
+        }
+        return VK_SUCCESS;
+    }
+
+    VkResult VKAPI_CALL nl_EnumerateDeviceExtensionProperties(VkPhysicalDevice       physicalDevice,
+                                                              const char*            pLayerName,
+                                                              uint32_t*              pPropertyCount,
+                                                              VkExtensionProperties* pProperties)
+    {
+        // pass through any queries that aren't to us
+        if (pLayerName == NULL || std::strcmp(pLayerName, LAYER_NAME))
+        {
+            if (physicalDevice == VK_NULL_HANDLE)
+            {
+                return VK_SUCCESS;
+            }
+
+            auto layerInstance = getLayerInstance(getKey(physicalDevice));
+            return layerInstance->vk.EnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pPropertyCount, pProperties);
+        }
+
+        // don't expose any extensions
+        if (pPropertyCount)
+        {
+            *pPropertyCount = 0;
+        }
+        return VK_SUCCESS;
     }
 } // namespace nl
 
