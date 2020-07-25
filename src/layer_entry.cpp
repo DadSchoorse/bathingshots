@@ -102,6 +102,8 @@ namespace nl
 
             g_instance_map.erase(getKey(instance));
         }
+
+        delete layerInstance;
     }
 
     VkResult VKAPI_CALL nl_CreateDevice(VkPhysicalDevice             physicalDevice,
@@ -109,7 +111,57 @@ namespace nl
                                         const VkAllocationCallbacks* pAllocator,
                                         VkDevice*                    pDevice)
     {
+        Logger::trace("vkCreateDevice");
+        auto layerCreateInfo = pNextSearch<VkLayerDeviceCreateInfo>(pCreateInfo->pNext, [](auto x) { return x->function == VK_LAYER_LINK_INFO; });
+
+        if (layerCreateInfo == nullptr)
+            return VK_ERROR_INITIALIZATION_FAILED;
+
+        PFN_vkGetInstanceProcAddr gipa = layerCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+        PFN_vkGetDeviceProcAddr   gdpa = layerCreateInfo->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+        // move chain on for next layer
+        layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
+
+        PFN_vkCreateDevice createFunc = (PFN_vkCreateDevice) gipa(VK_NULL_HANDLE, "vkCreateDevice");
+
+        VkResult ret = createFunc(physicalDevice, pCreateInfo, pAllocator, pDevice);
+        if (ret != VK_SUCCESS)
+            return ret;
+
+        auto layerInstance = getLayerInstance(getKey(physicalDevice));
+
+        LayerDevice* layerDevice = new LayerDevice();
+
+        layerDevice->vk             = layerInstance->vk;
+        layerDevice->device         = *pDevice;
+        layerDevice->physicalDevice = physicalDevice;
+        layerDevice->instance       = layerInstance;
+
+        initDeviceTable(gdpa, *pDevice, &layerDevice->vk);
+
+        {
+            std::lock_guard<std::mutex> l(g_device_map_mutex);
+
+            g_device_map[getKey(*pDevice)] = layerDevice;
+        }
+
         return VK_SUCCESS;
+    }
+
+    VK_LAYER_EXPORT void VKAPI_CALL nl_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator)
+    {
+        Logger::trace("vkDestroyDevice");
+
+        auto layerDevice = getLayerInstance(getKey(device));
+        layerDevice->vk.DestroyDevice(device, pAllocator);
+
+        {
+            std::lock_guard<std::mutex> l(g_device_map_mutex);
+
+            g_device_map.erase(getKey(device));
+        }
+
+        delete layerDevice;
     }
 } // namespace nl
 
