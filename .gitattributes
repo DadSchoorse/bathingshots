@@ -1,0 +1,4 @@
+src/generated/* linguist-generated
+
+include/vulkan/* linguist-vendored
+include/stbi/* linguist-vendored
