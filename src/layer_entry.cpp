@@ -346,7 +346,13 @@ namespace nl
             allocateDescriptorSets(layerDevice, layerSwapchain.pool, layerDevice->descriptorLayout, layerSwapchain.imageViews, layerSwapchain.buffer);
 
         VkFenceCreateInfo fenceCreateInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0};
-        res                               = layerDevice->vk.CreateFence(layerDevice->device, &fenceCreateInfo, nullptr, &layerSwapchain.fence);
+
+        res = layerDevice->vk.CreateFence(layerDevice->device, &fenceCreateInfo, nullptr, &layerSwapchain.fence);
+        ASSERT_VULKAN(res);
+
+        VkSemaphoreCreateInfo semaphoreCreateInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, nullptr, 0};
+
+        res = layerDevice->vk.CreateSemaphore(layerDevice->device, &semaphoreCreateInfo, nullptr, &layerSwapchain.semaphore);
         ASSERT_VULKAN(res);
 
         layerDevice->swapchains[*pSwapchain] = layerSwapchain; // TODO AAAAAAAAAAAAAAAAAA
@@ -371,6 +377,7 @@ namespace nl
         layerDevice->vk.DestroyBuffer(device, layerSwapchain.buffer, nullptr);
         layerDevice->vk.FreeMemory(device, layerSwapchain.bufferMemory, nullptr);
         layerDevice->vk.DestroyFence(device, layerSwapchain.fence, nullptr);
+        layerDevice->vk.DestroySemaphore(device, layerSwapchain.semaphore, nullptr);
 
         layerDevice->vk.DestroySwapchainKHR(device, swapchain, nullptr);
     }
@@ -479,10 +486,17 @@ namespace nl
 
             layerDevice->vk.EndCommandBuffer(commandBuffer);
 
-            VkSubmitInfo submitInfo       = {};
-            submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers    = &commandBuffer;
+            std::vector<VkPipelineStageFlags> waitStages(pPresentInfo->waitSemaphoreCount, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+
+            VkSubmitInfo submitInfo         = {};
+            submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.waitSemaphoreCount   = pPresentInfo->waitSemaphoreCount;
+            submitInfo.pWaitSemaphores      = pPresentInfo->pWaitSemaphores;
+            submitInfo.pWaitDstStageMask    = waitStages.data();
+            submitInfo.commandBufferCount   = 1;
+            submitInfo.pCommandBuffers      = &commandBuffer;
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores    = &layerSwapchain.semaphore;
 
             std::chrono::time_point<std::chrono::high_resolution_clock> start = std::chrono::high_resolution_clock::now();
 
@@ -515,6 +529,12 @@ namespace nl
             micro_seconds = end - blit;
             float cputime = micro_seconds.count();
             Logger::err(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + " µs cpu time");
+
+            VkPresentInfoKHR modPresentInfo   = *pPresentInfo;
+            modPresentInfo.waitSemaphoreCount = 1;
+            modPresentInfo.pWaitSemaphores    = &layerSwapchain.semaphore;
+
+            return layerDevice->vk.QueuePresentKHR(queue, &modPresentInfo);
         }
 
         return layerDevice->vk.QueuePresentKHR(queue, pPresentInfo);
