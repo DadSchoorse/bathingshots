@@ -1,0 +1,21 @@
+{
+  "file_format_version" : "1.0.0",
+  "layer" : {
+    "name": "VK_LAYER_bathingshots",
+    "type": "GLOBAL",
+    "library_path": "@ld_lib_dir_bathingshots@libbathingshots.so",
+    "api_version": "1.2.148",
+    "implementation_version": "1",
+    "description": "a screenshot layer",
+    "functions": {
+      "vkGetInstanceProcAddr": "nl_GetInstanceProcAddr",
+      "vkGetDeviceProcAddr":   "nl_GetDeviceProcAddr"
+    },
+    "enable_environment": {
+      "BATH": "1"
+    },
+    "disable_environment": {
+      "BATH_DISABLE": "1"
+    }
+  }
+}
