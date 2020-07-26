@@ -10,5 +10,5 @@
 #include "generated/vulkan_dispatch_table.hpp"
 
 #ifndef ASSERT_VULKAN
-#define ASSERT_VULKAN(val) assert(val);
+#define ASSERT_VULKAN(val) assert(!val);
 #endif
