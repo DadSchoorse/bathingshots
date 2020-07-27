@@ -16,8 +16,8 @@ ninja -C builddir install
 
 # How to use
 
-Set`BATH=1` in the environment. For example, use this as launch option for a steam game:
+Set `BATH=1` in the environment. For example, use this as launch option for a steam game:
 ```
 BATH=1 %command%
 ```
-Pressing `End` will save a screenshot to `/tmp/screenshot.png`, both arePressing `End` will save a screenshot to `/tmp/screenshot.png`, but is currently not  currently not configurable.
+Pressing `End` will save a screenshot to `/tmp/screenshot.png`, both are currently not configurable.
