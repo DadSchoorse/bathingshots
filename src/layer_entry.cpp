@@ -1,6 +1,8 @@
 #include <cstring>
 #include <mutex>
 #include <chrono>
+#include <utility>
+#include <thread>
 
 #include "layer_private.hpp"
 
@@ -316,46 +318,46 @@ namespace nl
         if (res != VK_SUCCESS)
             return res;
 
-        LayerSwapchain layerSwapchain = {};
+        LayerSwapchain* layerSwapchain = new LayerSwapchain();
 
-        res = layerDevice->vk.GetSwapchainImagesKHR(device, *pSwapchain, &layerSwapchain.count, nullptr);
+        res = layerDevice->vk.GetSwapchainImagesKHR(device, *pSwapchain, &layerSwapchain->count, nullptr);
         ASSERT_VULKAN(res);
 
-        layerSwapchain.swapchain   = *pSwapchain;
-        layerSwapchain.images      = std::vector<VkImage>(layerSwapchain.count);
-        layerSwapchain.imageFormat = pCreateInfo->imageFormat;
-        layerSwapchain.extent      = pCreateInfo->imageExtent;
+        layerSwapchain->swapchain   = *pSwapchain;
+        layerSwapchain->images      = std::vector<VkImage>(layerSwapchain->count);
+        layerSwapchain->imageFormat = pCreateInfo->imageFormat;
+        layerSwapchain->extent      = pCreateInfo->imageExtent;
 
-        res = layerDevice->vk.GetSwapchainImagesKHR(device, *pSwapchain, &layerSwapchain.count, layerSwapchain.images.data());
+        res = layerDevice->vk.GetSwapchainImagesKHR(device, *pSwapchain, &layerSwapchain->count, layerSwapchain->images.data());
         ASSERT_VULKAN(res);
 
-        layerSwapchain.imageViews = createRGBAViews(layerDevice, layerSwapchain.images, layerSwapchain.imageFormat);
+        layerSwapchain->imageViews = createRGBAViews(layerDevice, layerSwapchain->images, layerSwapchain->imageFormat);
 
-        layerSwapchain.pool = createDescriptorPool(layerDevice, layerSwapchain.count);
+        layerSwapchain->pool = createDescriptorPool(layerDevice, layerSwapchain->count);
 
-        uint32_t bufferSize = layerSwapchain.extent.width * layerSwapchain.extent.height * sizeof(uint32_t);
+        uint32_t bufferSize = layerSwapchain->extent.width * layerSwapchain->extent.height * sizeof(uint32_t);
 
         createBuffer(layerDevice,
                      bufferSize,
                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, // TODO only require cached
-                     layerSwapchain.buffer,
-                     layerSwapchain.bufferMemory);
+                     layerSwapchain->buffer,
+                     layerSwapchain->bufferMemory);
 
-        layerSwapchain.descriptorSets =
-            allocateDescriptorSets(layerDevice, layerSwapchain.pool, layerDevice->descriptorLayout, layerSwapchain.imageViews, layerSwapchain.buffer);
+        layerSwapchain->descriptorSets = allocateDescriptorSets(
+            layerDevice, layerSwapchain->pool, layerDevice->descriptorLayout, layerSwapchain->imageViews, layerSwapchain->buffer);
 
         VkFenceCreateInfo fenceCreateInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0};
 
-        res = layerDevice->vk.CreateFence(layerDevice->device, &fenceCreateInfo, nullptr, &layerSwapchain.fence);
+        res = layerDevice->vk.CreateFence(layerDevice->device, &fenceCreateInfo, nullptr, &layerSwapchain->fence);
         ASSERT_VULKAN(res);
 
         VkSemaphoreCreateInfo semaphoreCreateInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, nullptr, 0};
 
-        res = layerDevice->vk.CreateSemaphore(layerDevice->device, &semaphoreCreateInfo, nullptr, &layerSwapchain.semaphore);
+        res = layerDevice->vk.CreateSemaphore(layerDevice->device, &semaphoreCreateInfo, nullptr, &layerSwapchain->semaphore);
         ASSERT_VULKAN(res);
 
-        layerDevice->swapchains[*pSwapchain] = layerSwapchain; // TODO AAAAAAAAAAAAAAAAAA
+        layerDevice->swapchains[*pSwapchain] = std::move(layerSwapchain); // TODO AAAAAAAAAAAAAAAAAA
 
         return VK_SUCCESS;
     }
@@ -366,20 +368,25 @@ namespace nl
 
         auto layerDevice = getLayerDevice(getKey(device));
 
-        LayerSwapchain layerSwapchain = layerDevice->swapchains[swapchain]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
+        LayerSwapchain* layerSwapchain = layerDevice->swapchains[swapchain]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
         layerDevice->swapchains.erase(swapchain);
 
-        for (auto view : layerSwapchain.imageViews)
+        while (layerSwapchain->lock.load())
+            continue;
+
+        for (auto view : layerSwapchain->imageViews)
         {
             layerDevice->vk.DestroyImageView(device, view, nullptr);
         }
-        layerDevice->vk.DestroyDescriptorPool(device, layerSwapchain.pool, nullptr);
-        layerDevice->vk.DestroyBuffer(device, layerSwapchain.buffer, nullptr);
-        layerDevice->vk.FreeMemory(device, layerSwapchain.bufferMemory, nullptr);
-        layerDevice->vk.DestroyFence(device, layerSwapchain.fence, nullptr);
-        layerDevice->vk.DestroySemaphore(device, layerSwapchain.semaphore, nullptr);
+        layerDevice->vk.DestroyDescriptorPool(device, layerSwapchain->pool, nullptr);
+        layerDevice->vk.DestroyBuffer(device, layerSwapchain->buffer, nullptr);
+        layerDevice->vk.FreeMemory(device, layerSwapchain->bufferMemory, nullptr);
+        layerDevice->vk.DestroyFence(device, layerSwapchain->fence, nullptr);
+        layerDevice->vk.DestroySemaphore(device, layerSwapchain->semaphore, nullptr);
 
         layerDevice->vk.DestroySwapchainKHR(device, swapchain, nullptr);
+
+        delete layerSwapchain;
     }
 
     VKAPI_ATTR VkResult VKAPI_CALL nl_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)
@@ -406,10 +413,14 @@ namespace nl
 
         if (screenshot)
         {
-            VkResult result;
             assert(pPresentInfo->swapchainCount == 1);
-            LayerSwapchain layerSwapchain = layerDevice->swapchains[pPresentInfo->pSwapchains[0]]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
-            uint32_t       index          = pPresentInfo->pImageIndices[0];
+            LayerSwapchain* layerSwapchain = layerDevice->swapchains[pPresentInfo->pSwapchains[0]]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
+
+            unsigned int trash = 0;
+            if (!layerSwapchain->lock.compare_exchange_strong(trash, 1))
+                goto BUSY;
+
+            uint32_t index = pPresentInfo->pImageIndices[0];
 
             auto commandBuffer = layerDevice->commandBuffers[queue];
 
@@ -424,19 +435,19 @@ namespace nl
             layerDevice->vk.BeginCommandBuffer(commandBuffer, &beginInfo);
 
             ImageToBufferCopy copy;
-            copy.imageExtentx = layerSwapchain.extent.width;
-            copy.imageExtenty = layerSwapchain.extent.height;
+            copy.imageExtentx = layerSwapchain->extent.width;
+            copy.imageExtenty = layerSwapchain->extent.height;
             ;
             copy.imageOffsetx    = 0;
             copy.imageOffsety    = 0;
             copy.mipLevel        = 0;
             copy.bufferOffset    = 0;
-            copy.bufferRowLength = layerSwapchain.extent.width;
+            copy.bufferRowLength = layerSwapchain->extent.width;
 
             layerDevice->vk.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layerDevice->transferPipeline);
 
             layerDevice->vk.CmdBindDescriptorSets(
-                commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layerDevice->pipelineLayout, 0, 1, &layerSwapchain.descriptorSets[index], 0, 0);
+                commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layerDevice->pipelineLayout, 0, 1, &layerSwapchain->descriptorSets[index], 0, 0);
 
             layerDevice->vk.CmdPushConstants(commandBuffer, layerDevice->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(copy), (void*) &copy);
 
@@ -445,7 +456,7 @@ namespace nl
             memoryBarrier.pNext               = nullptr;
             memoryBarrier.oldLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             memoryBarrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            memoryBarrier.image               = layerSwapchain.images[index];
+            memoryBarrier.image               = layerSwapchain->images[index];
             memoryBarrier.srcAccessMask       = 0;
             memoryBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
             memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -460,7 +471,7 @@ namespace nl
             layerDevice->vk.CmdPipelineBarrier(
                 commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &memoryBarrier);
 
-            layerDevice->vk.CmdDispatch(commandBuffer, layerSwapchain.extent.width / 8 + 1, layerSwapchain.extent.height / 8 + 1, 1);
+            layerDevice->vk.CmdDispatch(commandBuffer, layerSwapchain->extent.width / 8 + 1, layerSwapchain->extent.height / 8 + 1, 1);
 
             memoryBarrier.oldLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             memoryBarrier.newLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -496,46 +507,54 @@ namespace nl
             submitInfo.commandBufferCount   = 1;
             submitInfo.pCommandBuffers      = &commandBuffer;
             submitInfo.signalSemaphoreCount = 1;
-            submitInfo.pSignalSemaphores    = &layerSwapchain.semaphore;
+            submitInfo.pSignalSemaphores    = &layerSwapchain->semaphore;
 
             std::chrono::time_point<std::chrono::high_resolution_clock> start = std::chrono::high_resolution_clock::now();
 
-            layerDevice->vk.QueueSubmit(queue, 1, &submitInfo, layerSwapchain.fence);
+            layerDevice->vk.QueueSubmit(queue, 1, &submitInfo, layerSwapchain->fence);
 
             // TODO do not block
-            layerDevice->vk.WaitForFences(layerDevice->device, 1, &layerSwapchain.fence, VK_TRUE, ~0LLU);
+            layerDevice->vk.WaitForFences(layerDevice->device, 1, &layerSwapchain->fence, VK_TRUE, ~0LLU);
 
             std::chrono::time_point<std::chrono::high_resolution_clock> blit = std::chrono::high_resolution_clock::now();
 
-            layerDevice->vk.ResetFences(layerDevice->device, 1, &layerSwapchain.fence);
+            layerDevice->vk.ResetFences(layerDevice->device, 1, &layerSwapchain->fence);
 
-            uint32_t bufferSize = layerSwapchain.extent.width * layerSwapchain.extent.height * sizeof(uint32_t);
-            void*    data;
-            result = layerDevice->vk.MapMemory(layerDevice->device, layerSwapchain.bufferMemory, 0, bufferSize, 0, &data);
-            ASSERT_VULKAN(result);
+            auto convertToPNG = [=]() {
+                VkResult result;
+                uint32_t bufferSize = layerSwapchain->extent.width * layerSwapchain->extent.height * sizeof(uint32_t);
+                void*    data;
+                result = layerDevice->vk.MapMemory(layerDevice->device, layerSwapchain->bufferMemory, 0, bufferSize, 0, &data);
+                ASSERT_VULKAN(result);
 
-            // TODO invalidate memory here?
+                // TODO invalidate memory here?
 
-            stbi_write_png(
-                "/tmp/screenshot.png", layerSwapchain.extent.width, layerSwapchain.extent.height, 4, data, layerSwapchain.extent.width * 4);
-            layerDevice->vk.UnmapMemory(layerDevice->device, layerSwapchain.bufferMemory);
+                stbi_write_png(
+                    "/tmp/screenshot.png", layerSwapchain->extent.width, layerSwapchain->extent.height, 4, data, layerSwapchain->extent.width * 4);
+                layerDevice->vk.UnmapMemory(layerDevice->device, layerSwapchain->bufferMemory);
 
-            std::chrono::time_point<std::chrono::high_resolution_clock> end = std::chrono::high_resolution_clock::now();
-            Logger::err("finished saving");
+                std::chrono::time_point<std::chrono::high_resolution_clock> end = std::chrono::high_resolution_clock::now();
+                Logger::err("finished saving");
 
-            std::chrono::duration<float, std::micro> micro_seconds = blit - start;
-            float                                    gputime       = micro_seconds.count();
+                std::chrono::duration<float, std::micro> micro_seconds = blit - start;
+                float                                    gputime       = micro_seconds.count();
 
-            micro_seconds = end - blit;
-            float cputime = micro_seconds.count();
-            Logger::err(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + " µs cpu time");
+                micro_seconds = end - blit;
+                float cputime = micro_seconds.count();
+                Logger::err(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + " µs cpu time");
+
+                layerSwapchain->lock.store(0);
+            };
+
+            std::thread(convertToPNG).detach();
 
             VkPresentInfoKHR modPresentInfo   = *pPresentInfo;
             modPresentInfo.waitSemaphoreCount = 1;
-            modPresentInfo.pWaitSemaphores    = &layerSwapchain.semaphore;
+            modPresentInfo.pWaitSemaphores    = &layerSwapchain->semaphore;
 
             return layerDevice->vk.QueuePresentKHR(queue, &modPresentInfo);
         }
+    BUSY:
 
         return layerDevice->vk.QueuePresentKHR(queue, pPresentInfo);
     }
