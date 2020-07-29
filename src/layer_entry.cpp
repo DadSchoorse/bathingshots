@@ -452,9 +452,8 @@ namespace nl
             layerDevice->vk.BeginCommandBuffer(commandBuffer, &beginInfo);
 
             ImageToBufferCopy copy;
-            copy.imageExtentx = layerSwapchain->extent.width;
-            copy.imageExtenty = layerSwapchain->extent.height;
-            ;
+            copy.imageExtentx    = layerSwapchain->extent.width;
+            copy.imageExtenty    = layerSwapchain->extent.height;
             copy.imageOffsetx    = 0;
             copy.imageOffsety    = 0;
             copy.mipLevel        = 0;
