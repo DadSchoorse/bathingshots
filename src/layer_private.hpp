@@ -84,9 +84,13 @@ namespace nl
         uint32_t bufferRowLength;
     };
 
-    template<typename DispatchableType, typename SuperDispatchableType>
-    inline void initializeDispatchTable(DispatchableType dispatchableObject, SuperDispatchableType source)
-    {
-        *reinterpret_cast<void**>(dispatchableObject) = *reinterpret_cast<void**>(source);
+#define MAKE_INIT_DISPATCH_TABLE(TARGET, SOURCE)                                           \
+    inline void initializeDispatchTable(TARGET dispatchableObject, SOURCE source)          \
+    {                                                                                      \
+        *reinterpret_cast<void**>(dispatchableObject) = *reinterpret_cast<void**>(source); \
     }
+    MAKE_INIT_DISPATCH_TABLE(VkPhysicalDevice, VkInstance);
+    MAKE_INIT_DISPATCH_TABLE(VkQueue, VkDevice);
+    MAKE_INIT_DISPATCH_TABLE(VkCommandBuffer, VkDevice);
+#undef MAKE_INIT_DISPATCH_TABLE
 } // namespace nl
