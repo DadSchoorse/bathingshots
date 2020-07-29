@@ -513,14 +513,13 @@ namespace nl
 
             layerDevice->vk.QueueSubmit(queue, 1, &submitInfo, layerSwapchain->fence);
 
-            // TODO do not block
-            layerDevice->vk.WaitForFences(layerDevice->device, 1, &layerSwapchain->fence, VK_TRUE, ~0LLU);
+            auto convertToPNG = [layerDevice, layerSwapchain, start]() {
+                layerDevice->vk.WaitForFences(layerDevice->device, 1, &layerSwapchain->fence, VK_TRUE, ~0LLU);
 
-            std::chrono::time_point<std::chrono::high_resolution_clock> blit = std::chrono::high_resolution_clock::now();
+                std::chrono::time_point<std::chrono::high_resolution_clock> blit = std::chrono::high_resolution_clock::now();
 
-            layerDevice->vk.ResetFences(layerDevice->device, 1, &layerSwapchain->fence);
+                layerDevice->vk.ResetFences(layerDevice->device, 1, &layerSwapchain->fence);
 
-            auto convertToPNG = [=]() {
                 VkResult result;
                 uint32_t bufferSize = layerSwapchain->extent.width * layerSwapchain->extent.height * sizeof(uint32_t);
                 void*    data;
@@ -541,7 +540,7 @@ namespace nl
 
                 micro_seconds = end - blit;
                 float cputime = micro_seconds.count();
-                Logger::err(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + " µs cpu time");
+                Logger::err(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + "µs cpu time");
 
                 layerSwapchain->lock.store(0);
             };
