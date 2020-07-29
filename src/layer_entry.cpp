@@ -168,6 +168,16 @@ namespace nl
         modCreateInfo.enabledExtensionCount   = extensions.size();
         modCreateInfo.ppEnabledExtensionNames = extensions.data();
 
+        VkPhysicalDevicePrivateDataFeaturesEXT deviceDataFeatures;
+        deviceDataFeatures.sType       = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT;
+        deviceDataFeatures.pNext       = (void*) std::exchange(modCreateInfo.pNext, &deviceDataFeatures);
+        deviceDataFeatures.privateData = VK_TRUE;
+
+        VkDevicePrivateDataCreateInfoEXT deviceDataCreateInfo;
+        deviceDataCreateInfo.sType                       = VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO_EXT;
+        deviceDataCreateInfo.pNext                       = std::exchange(modCreateInfo.pNext, &deviceDataCreateInfo);
+        deviceDataCreateInfo.privateDataSlotRequestCount = 1;
+
         VkResult ret = createFunc(physicalDevice, &modCreateInfo, pAllocator, pDevice);
         if (ret != VK_SUCCESS)
             return ret;
@@ -233,6 +243,10 @@ namespace nl
             }
         }
 
+        VkPrivateDataSlotCreateInfoEXT dataSlotCreateInfo = {VK_STRUCTURE_TYPE_PRIVATE_DATA_SLOT_CREATE_INFO_EXT, nullptr, 0};
+        VkResult result = layerDevice->vk.CreatePrivateDataSlotEXT(layerDevice->device, &dataSlotCreateInfo, nullptr, &layerDevice->dataSlot);
+        ASSERT_VULKAN(result);
+
         {
             std::lock_guard<std::mutex> l(g_device_map_mutex);
 
@@ -248,6 +262,7 @@ namespace nl
 
         auto layerDevice = getLayerDevice(device);
 
+        layerDevice->vk.DestroyPrivateDataSlotEXT(device, layerDevice->dataSlot, nullptr);
         layerDevice->vk.DestroyDescriptorSetLayout(device, layerDevice->descriptorLayout, nullptr);
         layerDevice->vk.DestroyPipelineLayout(device, layerDevice->pipelineLayout, nullptr);
         layerDevice->vk.DestroyPipeline(device, layerDevice->transferPipeline, nullptr);
