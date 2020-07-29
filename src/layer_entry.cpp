@@ -435,7 +435,7 @@ namespace nl
 
             unsigned int trash = 0;
             if (!layerSwapchain->lock.compare_exchange_strong(trash, 1))
-                goto BUSY;
+                return layerDevice->vk.QueuePresentKHR(queue, pPresentInfo);
 
             uint32_t index = pPresentInfo->pImageIndices[0];
 
@@ -569,7 +569,6 @@ namespace nl
 
             return layerDevice->vk.QueuePresentKHR(queue, &modPresentInfo);
         }
-    BUSY:
 
         return layerDevice->vk.QueuePresentKHR(queue, pPresentInfo);
     }
