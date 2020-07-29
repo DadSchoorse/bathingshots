@@ -28,8 +28,9 @@ namespace nl
     std::mutex                              g_device_map_mutex;
     thread_local DeviceCache                t_device_cache;
 
-    static inline LayerInstance* getLayerInstance(void* key)
+    static inline LayerInstance* getLayerInstance(VkInstance instance)
     {
+        void* key = getKey(instance);
         if (likely(t_instance_cache.loaderKey == key))
         {
             return t_instance_cache.layerInstance;
@@ -49,8 +50,14 @@ namespace nl
         return layerInstance;
     }
 
-    static inline LayerDevice* getLayerDevice(void* key)
+    static inline LayerInstance* getLayerInstance(VkPhysicalDevice physicalDevice)
     {
+        return getLayerInstance((VkInstance) physicalDevice);
+    }
+
+    static inline LayerDevice* getLayerDevice(VkDevice device)
+    {
+        void* key = getKey(device);
         if (likely(t_device_cache.loaderKey == key))
         {
             return t_device_cache.layerDevice;
@@ -68,6 +75,16 @@ namespace nl
         t_device_cache.layerDevice = layerDevice;
 
         return layerDevice;
+    }
+
+    static inline LayerDevice* getLayerDevice(VkQueue queue)
+    {
+        return getLayerDevice((VkDevice) queue);
+    }
+
+    static inline LayerDevice* getLayerDevice(VkCommandBuffer commandBuffer)
+    {
+        return getLayerDevice((VkCommandBuffer) commandBuffer);
     }
 
     VkResult VKAPI_CALL nl_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
@@ -105,7 +122,7 @@ namespace nl
     {
         Logger::trace("vkDestroyInstance");
 
-        auto layerInstance = getLayerInstance(getKey(instance));
+        auto layerInstance = getLayerInstance(instance);
         layerInstance->vk.DestroyInstance(instance, pAllocator);
 
         {
@@ -139,7 +156,7 @@ namespace nl
         if (ret != VK_SUCCESS)
             return ret;
 
-        auto layerInstance = getLayerInstance(getKey(physicalDevice));
+        auto layerInstance = getLayerInstance(physicalDevice);
 
         LayerDevice* layerDevice = new LayerDevice();
 
@@ -213,7 +230,7 @@ namespace nl
     {
         Logger::trace("vkDestroyDevice");
 
-        auto layerDevice = getLayerDevice(getKey(device));
+        auto layerDevice = getLayerDevice(device);
 
         layerDevice->vk.DestroyDescriptorSetLayout(device, layerDevice->descriptorLayout, nullptr);
         layerDevice->vk.DestroyPipelineLayout(device, layerDevice->pipelineLayout, nullptr);
@@ -289,7 +306,7 @@ namespace nl
                 return VK_SUCCESS;
             }
 
-            auto layerInstance = getLayerInstance(getKey(physicalDevice));
+            auto layerInstance = getLayerInstance(physicalDevice);
             return layerInstance->vk.EnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pPropertyCount, pProperties);
         }
 
@@ -308,7 +325,7 @@ namespace nl
     {
         Logger::trace("vkCreateSwapchainKHR");
 
-        auto layerDevice = getLayerDevice(getKey(device));
+        auto layerDevice = getLayerDevice(device);
 
         VkSwapchainCreateInfoKHR modifiedCreateInfo = *pCreateInfo;
 
@@ -366,7 +383,7 @@ namespace nl
     {
         Logger::trace("vkDestroySwapchainKHR");
 
-        auto layerDevice = getLayerDevice(getKey(device));
+        auto layerDevice = getLayerDevice(device);
 
         LayerSwapchain* layerSwapchain = layerDevice->swapchains[swapchain]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
         layerDevice->swapchains.erase(swapchain);
@@ -391,7 +408,7 @@ namespace nl
 
     VKAPI_ATTR VkResult VKAPI_CALL nl_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)
     {
-        auto layerDevice = getLayerDevice(getKey(queue));
+        auto layerDevice = getLayerDevice(queue);
 
         static uint32_t keySymbol = convertToKeySym("End");
 
@@ -591,7 +608,7 @@ extern "C"
         using namespace nl;
         INTERCEPT_CALLS;
 
-        auto layerDevice = getLayerDevice(getKey(device));
+        auto layerDevice = getLayerDevice(device);
         return layerDevice->vk.GetDeviceProcAddr(device, pName);
     }
 
@@ -600,7 +617,7 @@ extern "C"
         using namespace nl;
         INTERCEPT_CALLS;
 
-        auto layerInstance = getLayerInstance(getKey(instance));
+        auto layerInstance = getLayerInstance(instance);
         return layerInstance->vk.GetInstanceProcAddr(instance, pName);
     }
 
