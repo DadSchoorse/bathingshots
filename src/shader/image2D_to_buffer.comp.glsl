@@ -26,7 +26,7 @@ void main()
     }
     
     uint dataOffset = region.bufferOffset + gl_GlobalInvocationID.y * region.bufferRowLength + gl_GlobalInvocationID.x;
-    vec4 rawData = texelFetch(inputImage, ivec2(gl_GlobalInvocationID.xy + region.imageOffset), region.mipLevel);
+    vec4 rawData = vec4(texelFetch(inputImage, ivec2(gl_GlobalInvocationID.xy + region.imageOffset), region.mipLevel).rgb, 1.0);
     uint data = packUnorm4x8(rawData);
     outputData[dataOffset] = data;
 }
