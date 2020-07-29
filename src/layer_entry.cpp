@@ -549,14 +549,14 @@ namespace nl
                 layerDevice->vk.UnmapMemory(layerDevice->device, layerSwapchain->bufferMemory);
 
                 std::chrono::time_point<std::chrono::high_resolution_clock> end = std::chrono::high_resolution_clock::now();
-                Logger::err("finished saving");
+                Logger::info("finished saving");
 
                 std::chrono::duration<float, std::micro> micro_seconds = blit - start;
                 float                                    gputime       = micro_seconds.count();
 
                 micro_seconds = end - blit;
                 float cputime = micro_seconds.count();
-                Logger::err(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + "µs cpu time");
+                Logger::info(std::to_string(gputime) + "µs shader vs " + std::to_string(cputime) + "µs cpu time");
 
                 layerSwapchain->lock.store(0);
             };
