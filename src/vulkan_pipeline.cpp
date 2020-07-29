@@ -24,7 +24,7 @@ namespace nl
         return pipelineLayout;
     }
 
-    VkPipeline createComputePipeline(LayerDevice* device, VkPipelineLayout layout, std::span<uint32_t> shader)
+    VkPipeline createComputePipeline(LayerDevice* device, VkPipelineLayout layout, std::span<const uint32_t> shader)
     {
         VkShaderModule shaderModule;
 

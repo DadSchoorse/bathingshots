@@ -153,11 +153,11 @@ namespace nl
         layerDevice->descriptorLayout = createDescriptorSetLayout(layerDevice);
         layerDevice->pipelineLayout   = createPipelineLayout(layerDevice, layerDevice->descriptorLayout, sizeof(ImageToBufferCopy));
 
-        static uint32_t shaderCode[] = {
+        static constexpr uint32_t shaderCode[] = {
 #include "image2D_to_buffer.comp.h"
         };
 
-        layerDevice->transferPipeline = createComputePipeline(layerDevice, layerDevice->pipelineLayout, std::span<uint32_t>(shaderCode));
+        layerDevice->transferPipeline = createComputePipeline(layerDevice, layerDevice->pipelineLayout, std::span<const uint32_t>(shaderCode));
 
         for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++)
         {
