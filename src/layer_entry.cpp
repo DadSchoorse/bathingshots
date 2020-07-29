@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <chrono>
@@ -152,7 +153,22 @@ namespace nl
 
         PFN_vkCreateDevice createFunc = (PFN_vkCreateDevice) gipa(VK_NULL_HANDLE, "vkCreateDevice");
 
-        VkResult ret = createFunc(physicalDevice, pCreateInfo, pAllocator, pDevice);
+        std::vector<const char*> extensions(pCreateInfo->ppEnabledExtensionNames,
+                                            pCreateInfo->ppEnabledExtensionNames + pCreateInfo->enabledExtensionCount);
+
+        const char* reqired_ext[] = {"VK_EXT_private_data"};
+
+        for (auto ext : reqired_ext)
+        {
+            if (std::find(extensions.begin(), extensions.end(), ext) == extensions.end())
+                extensions.push_back(ext);
+        }
+
+        VkDeviceCreateInfo modCreateInfo      = *pCreateInfo;
+        modCreateInfo.enabledExtensionCount   = extensions.size();
+        modCreateInfo.ppEnabledExtensionNames = extensions.data();
+
+        VkResult ret = createFunc(physicalDevice, &modCreateInfo, pAllocator, pDevice);
         if (ret != VK_SUCCESS)
             return ret;
 
