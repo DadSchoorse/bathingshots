@@ -88,6 +88,25 @@ namespace nl
         return getLayerDevice((VkCommandBuffer) commandBuffer);
     }
 
+    static inline LayerSwapchain* getLayerSwapchain(LayerDevice* layerDevice, VkSwapchainKHR swapchain)
+    {
+        uint64_t result;
+
+        layerDevice->vk.GetPrivateDataEXT(layerDevice->device, VK_OBJECT_TYPE_SWAPCHAIN_KHR, (uint64_t) swapchain, layerDevice->dataSlot, &result);
+        return (LayerSwapchain*) (uintptr_t) result;
+    }
+
+    static inline void setLayerSwapchain(LayerDevice* layerDevice, LayerSwapchain* layerSwapchain, VkSwapchainKHR swapchain)
+    {
+        VkResult result;
+
+        uint64_t data = (uint64_t)(uintptr_t) layerSwapchain;
+
+        result =
+            layerDevice->vk.SetPrivateDataEXT(layerDevice->device, VK_OBJECT_TYPE_SWAPCHAIN_KHR, (uint64_t) swapchain, layerDevice->dataSlot, data);
+        ASSERT_VULKAN(result);
+    }
+
     VkResult VKAPI_CALL nl_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
     {
         Logger::trace("vkCreateInstance");
@@ -405,7 +424,7 @@ namespace nl
         res = layerDevice->vk.CreateSemaphore(layerDevice->device, &semaphoreCreateInfo, nullptr, &layerSwapchain->semaphore);
         ASSERT_VULKAN(res);
 
-        layerDevice->swapchains[*pSwapchain] = std::move(layerSwapchain); // TODO AAAAAAAAAAAAAAAAAA
+        setLayerSwapchain(layerDevice, layerSwapchain, *pSwapchain);
 
         return VK_SUCCESS;
     }
@@ -416,8 +435,7 @@ namespace nl
 
         auto layerDevice = getLayerDevice(device);
 
-        LayerSwapchain* layerSwapchain = layerDevice->swapchains[swapchain]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
-        layerDevice->swapchains.erase(swapchain);
+        LayerSwapchain* layerSwapchain = getLayerSwapchain(layerDevice, swapchain);
 
         while (layerSwapchain->lock.load())
             continue;
@@ -462,7 +480,7 @@ namespace nl
         if (screenshot)
         {
             assert(pPresentInfo->swapchainCount == 1);
-            LayerSwapchain* layerSwapchain = layerDevice->swapchains[pPresentInfo->pSwapchains[0]]; // TODO AAAAAAAAAAAAAAAAAAAAAAA
+            LayerSwapchain* layerSwapchain = getLayerSwapchain(layerDevice, pPresentInfo->pSwapchains[0]);
 
             unsigned int trash = 0;
             if (!layerSwapchain->lock.compare_exchange_strong(trash, 1))

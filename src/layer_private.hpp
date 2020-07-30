@@ -54,17 +54,16 @@ namespace nl
 
     struct LayerDevice
     {
-        VulkanDispatchTable                                 vk             = {};
-        VkDevice                                            device         = VK_NULL_HANDLE;
-        VkPhysicalDevice                                    physicalDevice = VK_NULL_HANDLE;
-        LayerInstance*                                      instance       = nullptr;
-        VkPrivateDataSlotEXT                                dataSlot       = VK_NULL_HANDLE;
-        std::unordered_map<VkSwapchainKHR, LayerSwapchain*> swapchains; // TODO burn with fire and use private_data because thread safty
-        std::unordered_map<VkQueue, VkCommandPool>          commandPools;
-        std::unordered_map<VkQueue, VkCommandBuffer>        commandBuffers;
-        VkDescriptorSetLayout                               descriptorLayout;
-        VkPipelineLayout                                    pipelineLayout;
-        VkPipeline                                          transferPipeline;
+        VulkanDispatchTable                          vk             = {};
+        VkDevice                                     device         = VK_NULL_HANDLE;
+        VkPhysicalDevice                             physicalDevice = VK_NULL_HANDLE;
+        LayerInstance*                               instance       = nullptr;
+        VkPrivateDataSlotEXT                         dataSlot       = VK_NULL_HANDLE;
+        std::unordered_map<VkQueue, VkCommandPool>   commandPools;
+        std::unordered_map<VkQueue, VkCommandBuffer> commandBuffers;
+        VkDescriptorSetLayout                        descriptorLayout;
+        VkPipelineLayout                             pipelineLayout;
+        VkPipeline                                   transferPipeline;
     };
 
     struct DeviceCache
