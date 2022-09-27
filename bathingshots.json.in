@@ -4,7 +4,7 @@
     "name": "VK_LAYER_bathingshots",
     "type": "GLOBAL",
     "library_path": "@ld_lib_dir_bathingshots@libbathingshots.so",
-    "api_version": "1.2.148",
+    "api_version": "1.3.229",
     "implementation_version": "1",
     "description": "a screenshot layer",
     "functions": {
