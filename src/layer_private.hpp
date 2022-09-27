@@ -81,6 +81,7 @@ namespace nl
         int32_t  mipLevel;
         uint32_t bufferOffset;
         uint32_t bufferRowLength;
+        uint32_t linearColor;
     };
 
 #define MAKE_INIT_DISPATCH_TABLE(TARGET, SOURCE)                                           \

@@ -508,6 +508,11 @@ namespace nl
             copy.mipLevel        = 0;
             copy.bufferOffset    = 0;
             copy.bufferRowLength = layerSwapchain->extent.width;
+            copy.linearColor     = layerSwapchain->imageFormat == VK_FORMAT_R8G8B8A8_SRGB ||
+                                   layerSwapchain->imageFormat == VK_FORMAT_B8G8R8A8_SRGB ||
+                                   layerSwapchain->imageFormat == VK_FORMAT_A8B8G8R8_SRGB_PACK32 ||
+                                   layerSwapchain->imageFormat == VK_FORMAT_B8G8R8_SRGB ||
+                                   layerSwapchain->imageFormat == VK_FORMAT_R8G8B8_SRGB;
 
             layerDevice->vk.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layerDevice->transferPipeline);
 
